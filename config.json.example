@@ -1,0 +1,8 @@
+{
+    "server_ip": "10.0.8.1",
+    "public_ip": "",
+    "max_users": 200,
+    "wg_conf_path": "/etc/wireguard/wg0.conf",
+    "peers_db_path": "./.peers.db",
+    "listen_port": "51820"
+}
