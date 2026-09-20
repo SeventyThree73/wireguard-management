@@ -51,7 +51,7 @@ if [ -z "$PEER_NAME" ]; then
 fi
 
 # === 确保 wg0.conf 存在，不存在则创建基础配置 ===
-if ! sudo -u root test -f "$WG_CONF_PATH"; then
+if [ ! -f "$WG_CONF_PATH" ]; then
   echo "⚠️ $WG_CONF_PATH not found. Creating it with basic interface config..." >&2
 
   # 创建目录（如果不存在）
@@ -62,7 +62,7 @@ if ! sudo -u root test -f "$WG_CONF_PATH"; then
   PUBLIC_KEY_SERVER=$(echo "$PRIVATE_KEY_SERVER" | wg pubkey)
 
   # 写入基础配置（Server IP + ListenPort）
-    sudo tee -a "$WG_CONF_PATH" <<EOF >/dev/null
+  cat > "$WG_CONF_PATH" <<EOF
 [Interface]
 Address = $SERVER_IP/24
 ListenPort = $LISTEN_PORT
@@ -74,6 +74,10 @@ PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACC
 EOF
 
   echo "✅ Created $WG_CONF_PATH with default interface." >&2
+else
+  # wg0.conf 已存在，从中读取 PrivateKey 并计算 PublicKey
+  PRIVATE_KEY_SERVER=$(grep "^PrivateKey" "$WG_CONF_PATH" | head -n1 | awk '{print $3}')
+  PUBLIC_KEY_SERVER=$(echo "$PRIVATE_KEY_SERVER" | wg pubkey)
 fi
 
 # === 确保 .peers.db 存在 ===
@@ -138,7 +142,7 @@ PUBLIC_KEY=$(echo "$PRIVATE_KEY" | wg pubkey)
 PRESHARED_KEY=$(wg genpsk)
 
 # 追加到主配置文件
-sudo tee -a "$WG_CONF_PATH" <<EOF >/dev/null
+cat >> "$WG_CONF_PATH" <<EOF
 
 # $PEER_NAME
 [Peer]
@@ -148,8 +152,8 @@ AllowedIPs = $IP/32
 EOF
 
 # 重新加载配置
-sudo wg-quick down wg0
-sudo wg-quick up wg0
+wg-quick down wg0
+wg-quick up wg0
 
 # 记录到数据库
 echo "$PEER_NAME=$IP" >> "$PEERS_DB_PATH"
@@ -168,7 +172,7 @@ DNS = 8.8.8.8
 
 # $PEER_NAME
 [Peer]
-PublicKey = $(sudo cat $WG_CONF_PATH | grep PrivateKey | head -n1 |  cut -d' ' -f3 | wg pubkey)
+PublicKey = $PUBLIC_KEY_SERVER
 PresharedKey = $PRESHARED_KEY
 Endpoint = $PUBLIC_IP:$LISTEN_PORT
 AllowedIPs = ${IP_PREFIX}.0/24
@@ -176,3 +180,4 @@ PersistentKeepalive = 25
 EOF
 
 echo "✅ Client config saved to: $CLIENT_CONF_PATH"
+
